@@ -1,159 +1,271 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-
-const API_URL = 'http://localhost/sales-management-system/sales_backend/';
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import { API_URL } from '../../services/api';
 
 export default function LocationManagement() {
   const [locations, setLocations] = useState([]);
-  const [newLocation, setNewLocation] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [msg, setMsg] = useState('');
+  const [bas, setBas] = useState([]);
+  const [selectedBaForLoc, setSelectedBaForLoc] = useState(null); // BA whose location is being changed
+  const [newLocationId, setNewLocationId] = useState("");
+  const [msg, setMsg] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [locationFilter, setLocationFilter] = useState("ALL");
 
-  const fetchLocations = () => {
-    axios.get(`${API_URL}manage_locations.php`)
-      .then(res => {
-        if (res.data.status === 'success') {
-          setLocations(res.data.locations);
-        }
-      })
-      .catch(err => console.error(err));
+  // Fetch Locations & BAs safely
+  const fetchData = async () => {
+    try {
+      const locRes = await axios.get(`${API_URL}manage_locations.php`);
+      console.log("Locations API Response:", locRes.data);
+
+      const baRes = await axios.get(`${API_URL}manage_bas.php`);
+      console.log("BAs API Response:", baRes.data);
+
+      // Handle locations array safely
+      if (Array.isArray(locRes.data)) {
+        setLocations(locRes.data);
+      } else if (locRes.data?.locations) {
+        setLocations(locRes.data.locations);
+      } else if (locRes.data?.data) {
+        setLocations(locRes.data.data);
+      }
+
+      // Handle BAs array safely
+      const baData = baRes.data?.bas || baRes.data?.users || baRes.data;
+      if (Array.isArray(baData)) {
+        setBas(baData);
+      }
+    } catch (err) {
+      console.error("Error loading data:", err);
+    }
   };
 
   useEffect(() => {
-    fetchLocations();
+    fetchData();
   }, []);
 
-  const handleAddLocation = async (e) => {
+  const filteredBas = bas.filter((ba) => {
+    const name = ba.name || ba.ba_name || "";
+    const username = ba.username || ba.ba_username || "";
+    const locationName = ba.location_name || "Not Assigned";
+    const matchesSearch = `${name} ${username} ${locationName}`
+      .toLowerCase()
+      .includes(searchTerm.trim().toLowerCase());
+    const matchesLocation =
+      locationFilter === "ALL" ||
+      (locationFilter === "UNASSIGNED"
+        ? !ba.location_id && !ba.location_name
+        : String(ba.location_id) === locationFilter);
+
+    return matchesSearch && matchesLocation;
+  });
+
+  // Handle Location Change Submit
+  const handleUpdateLocation = async (e) => {
     e.preventDefault();
-    if (!newLocation.trim()) return;
+    if (!selectedBaForLoc || !newLocationId) {
+      setMsg("❌ Please select a location!");
+      return;
+    }
+
+    const baIdToUpdate = selectedBaForLoc.id || selectedBaForLoc.ba_id;
 
     try {
       const res = await axios.post(`${API_URL}manage_locations.php`, {
-        action: 'add',
-        name: newLocation.trim()
+        action: "update_ba_location",
+        ba_id: baIdToUpdate,
+        location_id: newLocationId,
       });
 
-      if (res.data.status === 'success') {
-        setMsg('✅ Location added successfully!');
-        setNewLocation('');
-        fetchLocations();
-        setTimeout(() => setMsg(''), 3000);
+      if (res.data.status === "success") {
+        setMsg(
+          `✅ ${selectedBaForLoc.name || selectedBaForLoc.ba_name || "BA"} ki location update ho gayi hai!`,
+        );
+        setSelectedBaForLoc(null);
+        setNewLocationId("");
+        fetchData(); // Reload updated list
+        setTimeout(() => setMsg(""), 3000);
       } else {
-        setMsg(`❌ ${res.data.message}`);
+        setMsg(`❌ ${res.data.message || "Failed to update location"}`);
       }
     } catch (err) {
-      setMsg('❌ Network error!');
+      console.error("Update error:", err);
+      setMsg("❌ Network Error while updating location!");
     }
   };
-
-  const handleDeleteLocation = async (id, name) => {
-    if (!window.confirm(`Kya aap "${name}" location ko delete karna chahte hain?`)) return;
-
-    try {
-      const res = await axios.post(`${API_URL}manage_locations.php`, {
-        action: 'delete',
-        id: id
-      });
-
-      if (res.data.status === 'success') {
-        fetchLocations();
-      } else {
-        alert(res.data.message);
-      }
-    } catch (err) {
-      alert("Network error while deleting.");
-    }
-  };
-
-  const filteredLocations = locations.filter(loc => 
-    loc.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   return (
     <div className="space-y-8 pb-12">
       {/* Header Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 p-8 rounded-3xl text-white shadow-xl border border-teal-900/30">
         <span className="bg-teal-500/20 text-teal-300 text-[11px] font-black px-3.5 py-1 rounded-full border border-teal-500/30 uppercase tracking-widest">
-          Branch Control
+          Fleet Allocation
         </span>
-        <h2 className="text-3xl font-black mt-2 tracking-tight">Store Locations Management</h2>
-        <p className="text-slate-300 text-xs mt-1">Add new store branches, manage regional locations, and monitor active retail stores.</p>
+        <h2 className="text-3xl font-black mt-2 tracking-tight">
+          Location & Store Management
+        </h2>
+        <p className="text-slate-300 text-xs mt-1">
+          Manage retail store outlets and assign/change Brand Ambassadors to
+          active locations.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Add Location Form */}
-        <div className="lg:col-span-5 bg-white p-8 rounded-3xl border border-slate-200/80 shadow-sm h-fit space-y-5">
-          <div>
-            <h3 className="font-black text-xl text-slate-900">Add New Location</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Enter official branch or store name.</p>
-          </div>
+      {msg && (
+        <div
+          className={`p-4 rounded-2xl text-xs font-black ${msg.includes("✅") ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}
+        >
+          {msg}
+        </div>
+      )}
 
-          {msg && (
-            <div className={`p-3.5 rounded-2xl text-xs font-extrabold ${msg.includes('✅') ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-              {msg}
-            </div>
-          )}
-
-          <form onSubmit={handleAddLocation} className="space-y-4 text-xs font-bold text-slate-600">
-            <div>
-              <label className="block uppercase text-[10px] tracking-wider mb-1.5 text-slate-400 font-black">Location / Store Name</label>
-              <input 
-                type="text" 
-                value={newLocation} 
-                onChange={(e) => setNewLocation(e.target.value)} 
-                required 
-                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-800 font-bold focus:outline-none focus:bg-white focus:border-teal-600 shadow-sm transition" 
-                placeholder="e.g. Imtiaz Super Market - Clifton" 
-              />
-            </div>
-            <button type="submit" className="w-full bg-teal-700 hover:bg-teal-800 text-white py-4 rounded-2xl font-black text-xs transition shadow-lg mt-2">
-              + Add Store Location
-            </button>
-          </form>
+      {/* BA Location Assignment Directory */}
+      <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
+        <div>
+          <h3 className="font-black text-slate-900 text-lg">
+            Active Brand Ambassador Allocations
+          </h3>
+          <p className="text-xs text-slate-400">
+            Change store location assignment for any Brand Ambassador anytime.
+          </p>
         </div>
 
-        {/* Existing Locations Table */}
-        <div className="lg:col-span-7 bg-white p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h3 className="font-black text-xl text-slate-900">Active Locations</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Total Registered Branches: {locations.length}</p>
-            </div>
-            <input 
-              type="text" 
-              placeholder="🔍 Search location..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="text-xs bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 w-full sm:w-56 focus:outline-none focus:bg-white focus:border-teal-600 shadow-sm font-bold"
-            />
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search BA, username, location..."
+            aria-label="Search BA location assignments"
+            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-teal-600"
+          />
+          <select
+            value={locationFilter}
+            onChange={(e) => setLocationFilter(e.target.value)}
+            aria-label="Filter ambassadors by location"
+            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:border-teal-600"
+          >
+            <option value="ALL">All locations</option>
+            <option value="UNASSIGNED">Not assigned</option>
+            {locations.map((location) => (
+              <option key={location.id} value={String(location.id)}>
+                {location.name}
+              </option>
+            ))}
+          </select>
+        </div>
 
-          <div className="divide-y divide-slate-100 max-h-[480px] overflow-y-auto pr-2">
-            {filteredLocations.map((loc) => (
-              <div key={loc.id} className="py-4 flex items-center justify-between hover:bg-slate-50/80 transition px-3 rounded-2xl">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-11 h-11 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-center font-black text-teal-700 text-sm shadow-sm">
-                    📍
-                  </div>
-                  <div>
-                    <p className="font-black text-slate-900 text-sm">{loc.name}</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5 font-medium">Location ID: #{loc.id}</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => handleDeleteLocation(loc.id, loc.name)} 
-                  className="text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 px-4 py-2.5 rounded-2xl font-black transition border border-rose-200 shadow-sm"
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-slate-100 text-[11px] font-black text-slate-400 uppercase tracking-wider">
+                <th className="py-3.5 px-3">Ambassador Name</th>
+                <th className="py-3.5 px-3">Username</th>
+                <th className="py-3.5 px-3">Current Assigned Location</th>
+                <th className="py-3.5 px-3 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-sm">
+              {filteredBas.map((ba, idx) => (
+                <tr key={ba.id || ba.ba_id || idx} className="hover:bg-slate-50/80 transition">
+                  <td className="py-4 px-3 font-black text-slate-900">
+                    👤 {ba.name || ba.ba_name}
+                  </td>
+                  <td className="py-4 px-3 text-xs text-slate-400 font-bold">
+                    @{ba.username || ba.ba_username || "ba_user"}
+                  </td>
+                  <td className="py-4 px-3 font-bold text-teal-700">
+                    <span className="bg-teal-50 px-3 py-1.5 rounded-xl border border-teal-100">
+                      📍 {ba.location_name || "Not Assigned"}
+                    </span>
+                  </td>
+                  <td className="py-4 px-3 text-center">
+                    <button
+                      onClick={() => {
+                        setSelectedBaForLoc(ba);
+                        setNewLocationId(ba.location_id || "");
+                      }}
+                      className="bg-teal-700 hover:bg-teal-800 text-white font-black text-xs px-4 py-2 rounded-xl transition shadow-sm"
+                    >
+                      Change Location 📍
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {filteredBas.length === 0 && (
+                <tr>
+                  <td
+                    colSpan="4"
+                    className="text-center py-8 text-xs font-bold text-slate-400"
+                  >
+                    No matching Brand Ambassadors found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* CHANGE LOCATION MODAL */}
+      {selectedBaForLoc && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-200 space-y-5">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="font-black text-slate-900 text-lg">
+                  Change BA Location
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Reassigning location for{" "}
+                  {selectedBaForLoc.name || selectedBaForLoc.ba_name}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedBaForLoc(null)}
+                className="bg-slate-100 text-slate-600 font-black rounded-xl w-8 h-8 flex items-center justify-center text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateLocation} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5">
+                  Select New Location
+                </label>
+                <select
+                  value={newLocationId}
+                  onChange={(e) => setNewLocationId(e.target.value)}
+                  required
+                  className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-800 text-xs font-bold focus:outline-none focus:border-teal-600 shadow-sm"
                 >
-                  Delete
+                  <option value="">-- Choose New Store Outlet --</option>
+                  {locations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>
+                      📍 {loc.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="pt-2 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedBaForLoc(null)}
+                  className="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-2xl font-black text-xs transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="w-1/2 bg-teal-700 hover:bg-teal-800 text-white py-3 rounded-2xl font-black text-xs transition shadow-md"
+                >
+                  Save New Location
                 </button>
               </div>
-            ))}
-            {filteredLocations.length === 0 && (
-              <p className="text-center py-12 text-xs font-bold text-slate-400">No matching locations found.</p>
-            )}
+            </form>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

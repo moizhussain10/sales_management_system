@@ -1,8 +1,23 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 export default function Overview({ data }) {
   const stats = data.stats || {};
   const sales = data.sales || [];
+  const [searchTerm, setSearchTerm] = useState('');
+  const [locationFilter, setLocationFilter] = useState('ALL');
+  const locations = [...new Set(sales.map((item) => item.location_name).filter(Boolean))];
+  const filteredSales = sales.filter((item) => {
+    const searchableText = [
+      item.product_name,
+      item.ba_name,
+      item.location_name,
+      item.quantity,
+      item.total_amount,
+    ].filter((value) => value !== null && value !== undefined).join(' ').toLowerCase();
+
+    return searchableText.includes(searchTerm.trim().toLowerCase()) &&
+      (locationFilter === 'ALL' || item.location_name === locationFilter);
+  });
 
   return (
     <div className="space-y-8">
@@ -59,6 +74,31 @@ export default function Overview({ data }) {
           <span className="text-xs bg-slate-100 text-slate-600 px-3 py-1 rounded-full font-semibold">Live Logs</span>
         </div>
 
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search product, BA, location, quantity..."
+            aria-label="Search recent sales"
+            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-teal-600"
+          />
+          <select
+            value={locationFilter}
+            onChange={(e) => setLocationFilter(e.target.value)}
+            aria-label="Filter recent sales by location"
+            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:border-teal-600"
+          >
+            <option value="ALL">All locations</option>
+            {locations.map((location) => (
+              <option key={location} value={location}>{location}</option>
+            ))}
+          </select>
+        </div>
+        <p className="text-xs text-slate-500 mb-3">
+          Showing {Math.min(filteredSales.length, 6)} of {filteredSales.length} matching sales
+        </p>
+
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -71,7 +111,7 @@ export default function Overview({ data }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
-              {sales.slice(0, 6).map((item, idx) => (
+              {filteredSales.slice(0, 6).map((item, idx) => (
                 <tr key={idx} className="hover:bg-slate-50/80 transition">
                   <td className="py-3.5 px-3 font-semibold text-slate-800">{item.product_name}</td>
                   <td className="py-3.5 px-3">
@@ -87,9 +127,9 @@ export default function Overview({ data }) {
                   <td className="py-3.5 px-3 text-right font-black text-teal-600">PKR {Number(item.total_amount).toLocaleString()}</td>
                 </tr>
               ))}
-              {sales.length === 0 && (
+              {filteredSales.length === 0 && (
                 <tr>
-                  <td colSpan="5" className="text-center py-8 text-xs text-slate-400">No recent transactions recorded today.</td>
+                  <td colSpan="5" className="text-center py-8 text-xs text-slate-400">No matching sales records found.</td>
                 </tr>
               )}
             </tbody>

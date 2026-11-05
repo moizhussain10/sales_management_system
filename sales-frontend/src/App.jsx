@@ -1,19 +1,33 @@
-import React, { useState } from 'react';
-import { loginUser } from './services/api';
+import React, { useState, useEffect } from 'react';
+import { loginUser, logoutUser, getCurrentUser } from './services/api';
 import AdminLayout from './components/admin/AdminLayout';
 import BASalesEntry from './components/BASalesEntry';
 
 export default function App() {
-  // LocalStorage se check kar rahe hain ke pehle se user login hai ya nahi
-  const [user, setUser] = useState(() => {
-    const savedUser = localStorage.getItem('sales_user');
-    return savedUser ? JSON.parse(savedUser) : null;
-  });
+  const [user, setUser] = useState(null);
+  const [sessionLoading, setSessionLoading] = useState(true);
   
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const loadSession = async () => {
+      try {
+        const data = await getCurrentUser();
+        if (data?.status === 'success' && data.user) {
+          setUser(data.user);
+        }
+      } catch (err) {
+        setUser(null);
+      } finally {
+        setSessionLoading(false);
+      }
+    };
+
+    loadSession();
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -23,23 +37,39 @@ export default function App() {
       const res = await loginUser({ username, password });
       if (res.status === 'success') {
         setUser(res.user);
-        // Login success hone par user data localStorage mein save kar diya
-        localStorage.setItem('sales_user', JSON.stringify(res.user));
       } else {
         setError(res.message || 'Invalid username or password');
       }
     } catch (err) {
-      setError('Server connection failed. Please check your network.');
+      if (err.response?.status === 401) {
+        setError(err.response.data?.message || 'Invalid username or password.');
+      } else if (err.response?.status === 429) {
+        setError(err.response.data?.message || 'Too many login attempts. Please try again later.');
+      } else {
+        setError('Server connection failed. Please check your network.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+    } catch (err) {
+      // Ignore logout API failure and clear local UI state.
+    }
+
     setUser(null);
-    // Logout par localStorage se data remove kar diya
-    localStorage.removeItem('sales_user');
   };
+
+  if (sessionLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-300">
+        Loading session...
+      </div>
+    );
+  }
 
   if (!user) {
     return (

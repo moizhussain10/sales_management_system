@@ -14,15 +14,17 @@ export default function BAReport({ salesData = [] }) {
   const [sortBy, setSortBy] = useState("revenue_desc");
   const [selectedBA, setSelectedBA] = useState(null); // Selected BA for detail view
 
+  const COMMISSION_PER_UNIT = 100; // PKR 100 per unit sold
+
   // Group sales by BA name/id dynamically from salesData
   const baMap = {};
 
   salesData.forEach((item) => {
-    const key = item.ba_name || `BA-${item.ba_id}`;
+    const key = item.ba_name ? item.ba_name.trim() : `BA-${item.ba_id}`;
     if (!baMap[key]) {
       baMap[key] = {
         ba_id: item.ba_id,
-        ba_name: item.ba_name || "N/A",
+        ba_name: item.ba_name ? item.ba_name.trim() : "N/A",
         ba_username: item.ba_username || item.ba_name || "ba_user",
         location_name: item.location_name || "N/A",
         total_transactions: 0,
@@ -30,13 +32,17 @@ export default function BAReport({ salesData = [] }) {
         total_revenue_generated: 0,
       };
     }
+    const qty = parseInt(item.quantity || 0, 10);
     baMap[key].total_transactions += 1;
-    baMap[key].total_units_sold += parseInt(item.quantity || 0);
+    baMap[key].total_units_sold += qty;
     baMap[key].total_revenue_generated += parseFloat(item.total_amount || 0);
   });
 
-  // Convert object to array
-  let baReports = Object.values(baMap);
+  // Convert object to array and calculate commission
+  let baReports = Object.values(baMap).map(ba => ({
+    ...ba,
+    total_commission: ba.total_units_sold * COMMISSION_PER_UNIT
+  }));
 
   // Sorting Logic
   if (sortBy === "revenue_desc") {
@@ -47,6 +53,8 @@ export default function BAReport({ salesData = [] }) {
     baReports.sort(
       (a, b) => a.total_revenue_generated - b.total_revenue_generated,
     );
+  } else if (sortBy === "commission_desc") {
+    baReports.sort((a, b) => b.total_commission - a.total_commission);
   } else if (sortBy === "units_desc") {
     baReports.sort((a, b) => b.total_units_sold - a.total_units_sold);
   } else if (sortBy === "name_asc") {
@@ -71,8 +79,7 @@ export default function BAReport({ salesData = [] }) {
     (acc, curr) => acc + curr.total_units_sold,
     0,
   );
-  const avgRevenuePerBA =
-    baReports.length > 0 ? totalFleetRevenue / baReports.length : 0;
+  const totalFleetCommission = totalFleetUnits * COMMISSION_PER_UNIT;
 
   // Chart Data (Top 8 BAs)
   const chartData = [...baReports]
@@ -84,19 +91,33 @@ export default function BAReport({ salesData = [] }) {
           ? ba.ba_name.substring(0, 12) + "..."
           : ba.ba_name,
       Revenue: ba.total_revenue_generated,
-      Units: ba.total_units_sold,
+      Commission: ba.total_commission,
     }));
+
+  // STRICT SINGLE BA SALES FILTERING HELPER
+  const getSingleBASales = (ba) => {
+    if (!ba) return [];
+    return salesData.filter((s) => {
+      if (ba.ba_id && s.ba_id && String(s.ba_id) === String(ba.ba_id)) {
+        return true;
+      }
+      if (
+        s.ba_name &&
+        ba.ba_name &&
+        s.ba_name.trim().toLowerCase() === ba.ba_name.trim().toLowerCase()
+      ) {
+        return true;
+      }
+      return false;
+    });
+  };
 
   // Download individual BA report (CSV)
   const downloadSingleBAReport = (ba) => {
-    const baSales = salesData.filter(
-      (s) =>
-        (s.ba_name && s.ba_name === ba.ba_name) ||
-        String(s.ba_id) === String(ba.ba_id),
-    );
+    const baSales = getSingleBASales(ba);
 
     if (baSales.length === 0) {
-      alert(`"${ba.ba_name}" ki koi sales transaction recorded nahi hai.`);
+      alert(`"${ba.ba_name}" ki koi individual sales transaction recorded nahi hai.`);
       return;
     }
 
@@ -105,23 +126,31 @@ export default function BAReport({ salesData = [] }) {
       "Product Name",
       "Store Location",
       "Quantity",
+      "Commission (PKR)",
       "Total Amount (PKR)",
     ];
-    const rows = baSales.map((item) => [
-      `"${item.created_at || item.sale_date || ""}"`,
-      `"${item.product_name || ""}"`,
-      `"${item.location_name || ba.location_name || ""}"`,
-      item.quantity || 0,
-      item.total_amount || 0,
-    ]);
+
+    const rows = baSales.map((item) => {
+      const qty = parseInt(item.quantity || 0, 10);
+      return [
+        `"${item.created_at || item.sale_date || ""}"`,
+        `"${item.product_name || ""}"`,
+        `"${item.location_name || ba.location_name || ""}"`,
+        qty,
+        qty * COMMISSION_PER_UNIT,
+        item.total_amount || 0,
+      ];
+    });
 
     const csvContent =
       "data:text/csv;charset=utf-8," +
       [
-        `BA Performance Report - ${ba.ba_name}`,
-        `Assigned Location: ${ba.location_name}`,
-        `Total Units Sold: ${ba.total_units_sold}`,
-        `Total Revenue: PKR ${ba.total_revenue_generated}`,
+        `"BA Performance & Commission Statement - ${ba.ba_name}"`,
+        `"Assigned Location: ${ba.location_name}"`,
+        `"Total Units Sold: ${ba.total_units_sold}"`,
+        `"Commission Rate: PKR 100 per unit"`,
+        `"Total Commission Earned: PKR ${ba.total_commission}"`,
+        `"Total Revenue Generated: PKR ${ba.total_revenue_generated}"`,
         "",
         headers.join(","),
         ...rows.map((e) => e.join(",")),
@@ -132,7 +161,7 @@ export default function BAReport({ salesData = [] }) {
     link.setAttribute("href", encodedUri);
     link.setAttribute(
       "download",
-      `BA_Report_${ba.ba_name.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.csv`,
+      `BA_Commission_Report_${ba.ba_name.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.csv`,
     );
     document.body.appendChild(link);
     link.click();
@@ -152,6 +181,7 @@ export default function BAReport({ salesData = [] }) {
       "Store Location",
       "Total Transactions",
       "Total Units Sold",
+      "Commission Earned (PKR)",
       "Total Revenue Generated (PKR)",
     ];
     const rows = baReports.map((ba, idx) => [
@@ -160,15 +190,18 @@ export default function BAReport({ salesData = [] }) {
       `"${ba.location_name}"`,
       ba.total_transactions,
       ba.total_units_sold,
+      ba.total_commission,
       ba.total_revenue_generated,
     ]);
 
     const csvContent =
       "data:text/csv;charset=utf-8," +
       [
-        "Fleet Performance Executive Summary Report",
+        "Fleet Performance & Commission Executive Summary",
         `Generated On: ${new Date().toLocaleString()}`,
         `Total Active Fleet: ${baReports.length}`,
+        `Total Fleet Units Sold: ${totalFleetUnits}`,
+        `Total Fleet Commission Distributed: PKR ${totalFleetCommission}`,
         `Total Overall Revenue: PKR ${totalFleetRevenue}`,
         "",
         headers.join(","),
@@ -180,26 +213,15 @@ export default function BAReport({ salesData = [] }) {
     link.setAttribute("href", encodedUri);
     link.setAttribute(
       "download",
-      `Full_Fleet_Summary_Report_${new Date().toISOString().slice(0, 10)}.csv`,
+      `Full_Fleet_Commission_Summary_${new Date().toISOString().slice(0, 10)}.csv`,
     );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // Selected BA Sales Filtering Fix
-  const selectedBASales = selectedBA
-    ? salesData.filter((s) => {
-        if (selectedBA.ba_id && s.ba_id) {
-          return String(s.ba_id) === String(selectedBA.ba_id);
-        }
-        return (
-          s.ba_name &&
-          s.ba_name.trim().toLowerCase() ===
-            selectedBA.ba_name.trim().toLowerCase()
-        );
-      })
-    : [];
+  // Selected BA Sales Filtering
+  const selectedBASales = selectedBA ? getSingleBASales(selectedBA) : [];
 
   // Accurate Product Breakdown Calculation
   const baProductStats = {};
@@ -212,27 +234,27 @@ export default function BAReport({ salesData = [] }) {
       baProductStats[prodName] = (baProductStats[prodName] || 0) + qty;
     }
   });
+
   return (
     <div className="space-y-8 pb-12">
       {/* Header Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 p-8 rounded-3xl text-white shadow-xl border border-teal-900/30">
         <div>
           <span className="bg-teal-500/20 text-teal-300 text-[11px] font-black px-3.5 py-1 rounded-full border border-teal-500/30 uppercase tracking-widest">
-            Performance Analytics
+            Performance & Commission Analytics
           </span>
           <h2 className="text-3xl font-black mt-2 tracking-tight">
-            Brand Ambassador Performance Reports
+            Brand Ambassador Commission Reports
           </h2>
           <p className="text-slate-300 text-xs mt-1">
-            Click on any Brand Ambassador to view their complete profile and
-            sales ledger.
+            Tracking live sales performance and <strong>PKR 100/unit</strong> commission payouts across the fleet.
           </p>
         </div>
         <button
           onClick={downloadAllBAsSummary}
           className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs px-6 py-3.5 rounded-2xl shadow-lg transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex items-center justify-center space-x-2"
         >
-          <span>📊 Export Full Fleet Summary (CSV)</span>
+          <span>📊 Export Fleet Summary (CSV)</span>
         </button>
       </div>
 
@@ -264,6 +286,18 @@ export default function BAReport({ salesData = [] }) {
 
         <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm relative overflow-hidden">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+            Total Commission Payable
+          </p>
+          <h3 className="text-2xl font-black text-amber-600 mt-2">
+            PKR {totalFleetCommission.toLocaleString()}
+          </h3>
+          <p className="text-xs text-amber-700 font-bold mt-1 bg-amber-50 px-2.5 py-1 rounded-lg w-fit">
+            💰 @ PKR 100 / Unit
+          </p>
+        </div>
+
+        <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm relative overflow-hidden">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
             Total Revenue Generated
           </p>
           <h3 className="text-2xl font-black text-teal-700 mt-2">
@@ -271,18 +305,6 @@ export default function BAReport({ salesData = [] }) {
           </h3>
           <p className="text-xs text-emerald-700 font-bold mt-1 bg-emerald-50 px-2.5 py-1 rounded-lg w-fit">
             💵 Total Gross Sales
-          </p>
-        </div>
-
-        <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm relative overflow-hidden">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
-            Avg Revenue / Ambassador
-          </p>
-          <h3 className="text-2xl font-black text-slate-900 mt-2">
-            PKR {Math.round(avgRevenuePerBA).toLocaleString()}
-          </h3>
-          <p className="text-xs text-amber-700 font-bold mt-1 bg-amber-50 px-2.5 py-1 rounded-lg w-fit">
-            ⚡ Fleet Efficiency
           </p>
         </div>
       </div>
@@ -331,7 +353,7 @@ export default function BAReport({ salesData = [] }) {
               Ambassador Performance Directory
             </h3>
             <p className="text-xs text-slate-400">
-              Click on any row to open the detailed profile page of that BA.
+              Click on any row to open the detailed profile page and commission ledger of that BA.
             </p>
           </div>
 
@@ -342,6 +364,7 @@ export default function BAReport({ salesData = [] }) {
               className="text-xs bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 font-bold text-slate-700 focus:outline-none focus:border-teal-600 shadow-sm"
             >
               <option value="revenue_desc">▼ Sort: Highest Revenue</option>
+              <option value="commission_desc">💰 Sort: Highest Commission</option>
               <option value="revenue_asc">▲ Sort: Lowest Revenue</option>
               <option value="units_desc">📦 Sort: Most Units Sold</option>
               <option value="name_asc">🔤 Sort: Name (A to Z)</option>
@@ -366,9 +389,8 @@ export default function BAReport({ salesData = [] }) {
                 <th className="py-3.5 px-3">Assigned Location</th>
                 <th className="py-3.5 px-3 text-center">Transactions</th>
                 <th className="py-3.5 px-3 text-center">Units Sold</th>
-                <th className="py-3.5 px-3 text-right">
-                  Total Revenue Generated
-                </th>
+                <th className="py-3.5 px-3 text-right">Commission (@100/unit)</th>
+                <th className="py-3.5 px-3 text-right">Total Revenue</th>
                 <th className="py-3.5 px-3 text-center">Action</th>
               </tr>
             </thead>
@@ -424,6 +446,9 @@ export default function BAReport({ salesData = [] }) {
                   <td className="py-4 px-3 text-center font-black text-slate-900">
                     {ba.total_units_sold} Units
                   </td>
+                  <td className="py-4 px-3 text-right font-black text-amber-600 text-sm">
+                    PKR {ba.total_commission.toLocaleString()}
+                  </td>
                   <td className="py-4 px-3 text-right font-black text-teal-700 text-base">
                     PKR {ba.total_revenue_generated.toLocaleString()}
                   </td>
@@ -435,7 +460,7 @@ export default function BAReport({ salesData = [] }) {
                       onClick={() => downloadSingleBAReport(ba)}
                       className="bg-teal-50 hover:bg-teal-100 text-teal-800 font-black text-xs px-4 py-2.5 rounded-2xl transition border border-teal-200 shadow-sm"
                     >
-                      📄 Download
+                      📄 Statement
                     </button>
                   </td>
                 </tr>
@@ -443,7 +468,7 @@ export default function BAReport({ salesData = [] }) {
               {filteredReports.length === 0 && (
                 <tr>
                   <td
-                    colSpan="6"
+                    colSpan="7"
                     className="text-center py-12 text-xs font-bold text-slate-400"
                   >
                     No BA performance records found matching your filters.
@@ -478,7 +503,7 @@ export default function BAReport({ salesData = [] }) {
                   </div>
                   <p className="text-xs text-slate-400 font-medium mt-0.5">
                     @{selectedBA.ba_username} &nbsp;·&nbsp; Detailed Individual
-                    Performance Audit Statement
+                    Performance & Commission Audit Statement
                   </p>
                 </div>
               </div>
@@ -491,36 +516,44 @@ export default function BAReport({ salesData = [] }) {
             </div>
 
             {/* Individual KPIs */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200/80">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                  Total Revenue Generated
+                  Total Units Sold
                 </p>
-                <h4 className="text-2xl font-black text-teal-700 mt-1">
+                <h4 className="text-xl font-black text-slate-900 mt-1">
+                  {selectedBA.total_units_sold} Units
+                </h4>
+              </div>
+
+              <div className="bg-amber-50/80 p-4 rounded-2xl border border-amber-200/80">
+                <p className="text-[10px] font-black text-amber-700 uppercase tracking-wider">
+                  Commission Earned (@100/unit)
+                </p>
+                <h4 className="text-xl font-black text-amber-700 mt-1">
+                  PKR {selectedBA.total_commission.toLocaleString()}
+                </h4>
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                  Total Revenue
+                </p>
+                <h4 className="text-xl font-black text-teal-700 mt-1">
                   PKR {selectedBA.total_revenue_generated.toLocaleString()}
                 </h4>
               </div>
 
-              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200/80">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                  Total Sales Volume
+                  Total Orders
                 </p>
-                <h4 className="text-2xl font-black text-slate-900 mt-1">
-                  {selectedBA.total_units_sold} Units Sold
-                </h4>
-              </div>
-
-              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200/80">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                  Total Transactions Count
-                </p>
-                <h4 className="text-2xl font-black text-slate-900 mt-1">
+                <h4 className="text-xl font-black text-slate-900 mt-1">
                   {selectedBA.total_transactions} Orders
                 </h4>
               </div>
             </div>
 
-            {/* Product-wise Sales Breakdown */}
             {/* Product-wise Sales Breakdown */}
             <div className="bg-slate-50/80 p-5 rounded-2xl border border-slate-200/80 space-y-3">
               <h4 className="font-black text-slate-900 text-sm">
@@ -538,17 +571,21 @@ export default function BAReport({ salesData = [] }) {
                         <span className="font-bold text-slate-800">
                           {prodName}
                         </span>
-                        <span className="font-black bg-teal-50 text-teal-700 px-2.5 py-1 rounded-lg border border-teal-100">
-                          {totalQty} Units
-                        </span>
+                        <div className="text-right">
+                          <span className="font-black bg-teal-50 text-teal-700 px-2 py-0.5 rounded-lg border border-teal-100 block">
+                            {totalQty} Units
+                          </span>
+                          <span className="text-[10px] font-bold text-amber-600 mt-0.5 block">
+                            Com: PKR {totalQty * COMMISSION_PER_UNIT}
+                          </span>
+                        </div>
                       </div>
                     ),
                   )}
                 </div>
               ) : (
                 <p className="text-xs text-slate-400 font-medium">
-                  Is Brand Ambassador ki koi individual product sales record
-                  nahi hain.
+                  Is Brand Ambassador ki koi individual product sales record nahi hain.
                 </p>
               )}
             </div>
@@ -557,7 +594,7 @@ export default function BAReport({ salesData = [] }) {
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <h4 className="font-black text-slate-900 text-sm">
-                  📜 Live Sales Transaction History
+                  📜 Live Sales & Commission Audit History
                 </h4>
                 <button
                   onClick={() => downloadSingleBAReport(selectedBA)}
@@ -574,30 +611,37 @@ export default function BAReport({ salesData = [] }) {
                       <th className="py-2.5 px-3">Date & Time</th>
                       <th className="py-2.5 px-3">Product Name</th>
                       <th className="py-2.5 px-3 text-center">Qty</th>
+                      <th className="py-2.5 px-3 text-right">Commission (PKR)</th>
                       <th className="py-2.5 px-3 text-right">Amount (PKR)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs">
-                    {selectedBASales.map((sale, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50">
-                        <td className="py-3 px-3 font-semibold text-slate-500">
-                          {sale.created_at || sale.sale_date || "N/A"}
-                        </td>
-                        <td className="py-3 px-3 font-bold text-slate-900">
-                          {sale.product_name}
-                        </td>
-                        <td className="py-3 px-3 text-center font-black text-slate-800">
-                          {sale.quantity}
-                        </td>
-                        <td className="py-3 px-3 text-right font-black text-teal-700">
-                          PKR {Number(sale.total_amount).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
+                    {selectedBASales.map((sale, idx) => {
+                      const qty = parseInt(sale.quantity || 0, 10);
+                      return (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="py-3 px-3 font-semibold text-slate-500">
+                            {sale.created_at || sale.sale_date || "N/A"}
+                          </td>
+                          <td className="py-3 px-3 font-bold text-slate-900">
+                            {sale.product_name}
+                          </td>
+                          <td className="py-3 px-3 text-center font-black text-slate-800">
+                            {qty}
+                          </td>
+                          <td className="py-3 px-3 text-right font-black text-amber-600">
+                            PKR {qty * COMMISSION_PER_UNIT}
+                          </td>
+                          <td className="py-3 px-3 text-right font-black text-teal-700">
+                            PKR {Number(sale.total_amount).toLocaleString()}
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {selectedBASales.length === 0 && (
                       <tr>
                         <td
-                          colSpan="4"
+                          colSpan="5"
                           className="text-center py-6 text-xs text-slate-400"
                         >
                           No recorded sales transactions for this BA.

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-
-const API_URL = 'http://localhost/sales-management-system/sales_backend/';
+import { API_URL } from '../../services/api';
 
 export default function ProductManagement() {
   const [products, setProducts] = useState([]);

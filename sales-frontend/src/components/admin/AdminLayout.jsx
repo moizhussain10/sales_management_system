@@ -7,8 +7,10 @@ import BAManagement from './BAManagement';
 import LocationManagement from './LocationManagement';
 import ProductManagement from './ProductManagement';
 import BAReport from './BAReport';
-
-const API_URL = 'http://localhost/sales-management-system/sales_backend/';
+import DealManagement from './DealManagement';
+import AttendanceManagement from './AttendanceManagement';
+import AttendanceReport from './AttendanceReport';
+import { API_URL } from '../../services/api';
 
 export default function AdminLayout({ onLogout }) {
   const [activeTab, setActiveTab] = useState('overview');
@@ -47,39 +49,45 @@ export default function AdminLayout({ onLogout }) {
   const handleDeleteBA = async (baId) => {
     if (!window.confirm("Kya aap waqai is BA account ko remove karna chahte hain?")) return;
     try {
-      const res = await axios.delete(`${API_URL}manage_bas.php`, { data: { ba_id: baId } });
+      const res = await axios.post(`${API_URL}manage_bas.php`, {
+        action: 'delete',
+        ba_id: baId,
+      });
       if (res.data.status === 'success') fetchBAs();
     } catch (err) { console.error(err); }
   };
 
   const navItems = [
-    { id: 'overview', label: '1. Executive Overview', icon: '📊' },
-    { id: 'stock', label: '2. Inventory & Stock', icon: '📦' },
-    { id: 'analytics', label: '3. Analytics & Export', icon: '📈' },
-    { id: 'bas', label: '4. BA Accounts', icon: '👥' },
-    { id: 'locations', label: '5. Store Locations', icon: '📍' },
-    { id: 'products', label: '6. Products Catalog', icon: '💄' },
-    { id: 'ba-report', label: '6. BA Performance Reports', icon: '🏆' },
+    { id: 'overview', label: 'Overview', icon: '📊' },
+    { id: 'stock', label: 'Inventory', icon: '📦' },
+    { id: 'analytics', label: 'Analytics', icon: '📈' },
+    { id: 'bas', label: 'BA Accounts', icon: '👥' },
+    { id: 'locations', label: 'Locations', icon: '📍' },
+    { id: 'products', label: 'Products', icon: '💄' },
+    { id: 'attendance', label: 'Attendance', icon: '✅' },
+    { id: 'attendance-report', label: 'Reports', icon: '📋' },
+    { id: 'ba-report', label: 'Performance', icon: '🏆' },
+    { id: 'deal-management', label: 'Deals', icon: '🎯' },
   ];
 
   return (
     <div className="flex h-screen bg-slate-100 font-sans antialiased text-slate-800">
       {/* Dark Modern Sidebar */}
       <aside className="w-72 bg-slate-950 text-white p-6 flex flex-col justify-between shadow-2xl border-r border-slate-800">
-        <div>
+        <div className="flex flex-col min-h-0 flex-1">
           {/* Logo Brand */}
-          <div className="flex items-center gap-3 mb-10 px-2">
+          <div className="flex items-center gap-3 mb-8 px-2 flex-shrink-0">
             <div className="w-10 h-10 rounded-2xl bg-teal-500 flex items-center justify-center font-black text-slate-950 text-xl shadow-lg shadow-teal-500/30">
               B
             </div>
             <div>
               <h1 className="text-lg font-black tracking-wide text-white">Bloom Effekt</h1>
-              <p className="text-[10px] text-teal-400 font-bold tracking-widest uppercase">Admin Management</p>
+              <p className="text-[10px] text-teal-400 font-bold tracking-widest uppercase">Admin</p>
             </div>
           </div>
 
           {/* Navigation Links */}
-          <nav className="space-y-2">
+          <nav className="space-y-2 overflow-y-auto pr-1 flex-1 scrollbar-hide">
             {navItems.map((item) => {
               const isActive = activeTab === item.id;
               return (
@@ -132,7 +140,10 @@ export default function AdminLayout({ onLogout }) {
           {activeTab === 'bas' && <BAManagement baList={baList} onCreateBA={handleCreateBA} onDeleteBA={handleDeleteBA} />}
           {activeTab === 'locations' && <LocationManagement />}
           {activeTab === 'products' && <ProductManagement />}
+          {activeTab === 'attendance' && <AttendanceManagement baList={baList} />}
+          {activeTab === 'attendance-report' && <AttendanceReport baList={baList} />}
           {activeTab === 'ba-report' && <BAReport salesData={dashboardData.sales} />}
+          {activeTab === 'deal-management' && <DealManagement salesData={dashboardData.sales} />}
         </div>
       </main>
     </div>
