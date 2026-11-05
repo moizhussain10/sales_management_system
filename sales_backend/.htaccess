@@ -1,0 +1,3 @@
+<FilesMatch "^(config\.local|config\.infinityfree)\.php$">
+    Require all denied
+</FilesMatch>

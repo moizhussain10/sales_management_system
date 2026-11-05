@@ -1,6 +1,8 @@
 <?php
 include 'db.php';
 
+requireAuth(['admin']);
+
 try {
     // 1. Stats calculation
     $today = date('Y-m-d');
@@ -39,6 +41,10 @@ try {
             u.name as ba_name,
             l.name as location_name,
             s.quantity,
+            s.free_quantity,
+            s.deal_type,
+            s.discount_type,
+            s.discount_value,
             s.total_amount
         FROM sales s
         JOIN products p ON s.product_id = p.id
@@ -60,6 +66,6 @@ try {
     ));
 
 } catch (PDOException $e) {
-    echo json_encode(array("status" => "error", "message" => $e->getMessage()));
+    echo json_encode(array("status" => "error", "message" => apiExceptionMessage($e)));
 }
 ?>

@@ -1,6 +1,8 @@
 <?php
 include 'db.php';
 
+requireAuth(['admin']);
+
 $data = json_decode(file_get_contents("php://input"));
 
 if (!empty($data->id)) {
@@ -16,7 +18,7 @@ if (!empty($data->id)) {
             echo json_encode(array("status" => "error", "message" => "Failed to delete stock."));
         }
     } catch (PDOException $e) {
-        echo json_encode(array("status" => "error", "message" => "Database Error: " . $e->getMessage()));
+        echo json_encode(array("status" => "error", "message" => "Database Error: " . apiExceptionMessage($e)));
     }
 } else {
     echo json_encode(array("status" => "error", "message" => "Stock ID not provided."));

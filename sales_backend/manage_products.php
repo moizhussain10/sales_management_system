@@ -1,6 +1,8 @@
 <?php
 include 'db.php';
 
+requireAuth(['admin']);
+
 $method = $_SERVER['REQUEST_METHOD'];
 
 if ($method === 'GET') {
@@ -9,7 +11,7 @@ if ($method === 'GET') {
         $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
         echo json_encode(array("status" => "success", "products" => $products));
     } catch (PDOException $e) {
-        echo json_encode(array("status" => "error", "message" => $e->getMessage()));
+        echo json_encode(array("status" => "error", "message" => apiExceptionMessage($e)));
     }
 } elseif ($method === 'POST') {
     $data = json_decode(file_get_contents("php://input"));
@@ -26,7 +28,7 @@ if ($method === 'GET') {
                 $stmt->execute();
                 echo json_encode(array("status" => "success", "message" => "Product added successfully!"));
             } catch (PDOException $e) {
-                echo json_encode(array("status" => "error", "message" => "Failed to add product: " . $e->getMessage()));
+                echo json_encode(array("status" => "error", "message" => "Failed to add product: " . apiExceptionMessage($e)));
             }
         } else {
             echo json_encode(array("status" => "error", "message" => "Product name and price are required."));

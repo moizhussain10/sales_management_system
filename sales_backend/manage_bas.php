@@ -1,8 +1,14 @@
 <?php
 // CORS Headers
-header("Access-Control-Allow-Origin: *");
+if (isset($_SERVER['HTTP_ORIGIN'])) {
+    $allowedOrigins = array_filter(array_map('trim', explode(',', getenv('CORS_ALLOWED_ORIGINS') ?: 'http://localhost,http://localhost:5173,http://127.0.0.1,http://127.0.0.1:5173')));
+    if (in_array($_SERVER['HTTP_ORIGIN'], $allowedOrigins, true)) {
+        header("Access-Control-Allow-Origin: {$_SERVER['HTTP_ORIGIN']}");
+        header('Access-Control-Allow-Credentials: true');
+    }
+}
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-CSRF-Token");
 header("Content-Type: application/json");
 
 // Handle browser preflight OPTIONS request
@@ -12,6 +18,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 include 'db.php';
+
+requireAuth(['admin']);
 
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -27,7 +35,7 @@ if ($method === 'GET') {
         $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
         echo json_encode(array("status" => "success", "users" => $users));
     } catch (PDOException $e) {
-        echo json_encode(array("status" => "error", "message" => $e->getMessage()));
+        echo json_encode(array("status" => "error", "message" => apiExceptionMessage($e)));
     }
     exit;
 }
@@ -51,7 +59,7 @@ if ($method === 'POST') {
                     echo json_encode(array("status" => "error", "message" => "BA not found or already deleted."));
                 }
             } catch (PDOException $e) {
-                echo json_encode(array("status" => "error", "message" => "Database error: " . $e->getMessage()));
+                echo json_encode(array("status" => "error", "message" => "Database error: " . apiExceptionMessage($e)));
             }
         } else {
             echo json_encode(array("status" => "error", "message" => "Invalid BA ID provided."));
@@ -66,12 +74,12 @@ if ($method === 'POST') {
             $stmt->execute([
                 ':name' => $data->name, 
                 ':username' => $data->username, 
-                ':password' => $data->password, 
+                ':password' => password_hash((string) $data->password, PASSWORD_DEFAULT),
                 ':location_id' => $data->location_id
             ]);
             echo json_encode(array("status" => "success", "message" => "BA account created successfully!"));
         } catch (PDOException $e) {
-            echo json_encode(array("status" => "error", "message" => "Database error: " . $e->getMessage()));
+            echo json_encode(array("status" => "error", "message" => "Database error: " . apiExceptionMessage($e)));
         }
     } else {
         echo json_encode(array("status" => "error", "message" => "Incomplete parameters provided."));

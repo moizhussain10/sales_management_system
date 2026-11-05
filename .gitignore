@@ -1,0 +1,6 @@
+.env
+.env.*
+!.env.example
+sales-management-production.zip
+sales_backend/config.local.php
+sales_backend/config.infinityfree.php
