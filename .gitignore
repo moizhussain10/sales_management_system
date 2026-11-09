@@ -2,5 +2,6 @@
 .env.*
 !.env.example
 sales-management-production.zip
+frontend-dist-upload.zip
 sales_backend/config.local.php
 sales_backend/config.infinityfree.php

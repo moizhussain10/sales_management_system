@@ -11,7 +11,7 @@
 
 Configure these variables for the PHP/Apache process. If the host does not provide environment-variable settings, copy `sales_backend/config.local.php.example` to `sales_backend/config.local.php` and set the values there. That local file is ignored by Git and direct web requests are denied by the backend `.htaccess` rule. Never put the actual password in the example file or commit it.
 
-For local XAMPP, `sales_backend/config.local.php` uses the local `sales_management_db` database. The InfinityFree credentials belong in the separate, ignored `sales_backend/config.infinityfree.php` file. That secret file is deliberately excluded from the deployment ZIP. Upload it privately to InfinityFree's `htdocs/sales_backend/`, then rename it there to `config.local.php`; do not upload the local XAMPP config. The backend `.htaccess` blocks direct web access to both private config filenames.
+For local XAMPP, `sales_backend/config.local.php` uses the local `sales_management_db` database. The InfinityFree credentials belong in the separate, ignored `sales_backend/config.infinityfree.php` file. That secret file is deliberately excluded from the deployment ZIP. Upload it privately to InfinityFree's `htdocs/sales_backend/` as `config.infinityfree.php`; non-local web requests prefer it even if a stale `config.local.php` exists. Local requests continue to prefer `config.local.php`. Do not upload the local XAMPP config. The backend `.htaccess` blocks direct web access to both private config filenames.
 
 | Variable | Required production value |
 | --- | --- |

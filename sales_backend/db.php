@@ -1,5 +1,14 @@
 <?php
 $localConfigFile = __DIR__ . '/config.local.php';
+$infinityConfigFile = __DIR__ . '/config.infinityfree.php';
+$requestHost = strtolower(trim(explode(':', (string) ($_SERVER['HTTP_HOST'] ?? 'localhost'))[0], '[]'));
+$isLocalRequest = in_array($requestHost, ['localhost', '127.0.0.1', '::1'], true);
+
+if (!$isLocalRequest && is_file($infinityConfigFile)) {
+    $localConfigFile = $infinityConfigFile;
+} elseif (!is_file($localConfigFile) && is_file($infinityConfigFile)) {
+    $localConfigFile = $infinityConfigFile;
+}
 $localConfig = is_file($localConfigFile) ? require $localConfigFile : [];
 if (!is_array($localConfig)) {
     $localConfig = [];
